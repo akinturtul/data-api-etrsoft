@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veri Görüntüleme</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 1200px;
+      margin: auto;
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+
+    th, td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    th {
+      background-color: #3f51b5;
+      color: white;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 14px;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+
+    .toggle-btn {
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Veri Tablosu</h1>
+    <table id="data-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Hesap Kodu</th>
+          <th>Toplam Borç</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Veriler buraya eklenecek -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+async function fetchData() {
+  try {
+    const response = await fetch('/api/data');
+    const data = await response.json();
+    const tableBody = document.querySelector('#data-table tbody');
+
+    tableBody.innerHTML = '';
+
+    const groupedData = groupDataByHierarchy(data);
+    const finalData = calculateTotals(groupedData);
+
+    updateTable(finalData, tableBody);
+  } catch (error) {
+    console.error('Veri çekme hatası:', error);
+  }
+}
+
+function groupDataByHierarchy(data) {
+  const groupedData = {};
+
+  data.forEach(row => {
+    const { hesap_kodu, hesap_adi, borc } = row;
+
+    const parts = hesap_kodu.split('.');
+    const level1 = parts[0];
+    const level2 = parts.slice(0, 2).join('.');
+    const level3 = parts.slice(0, 3).join('.');
+
+    if (!groupedData[level1]) {
+      groupedData[level1] = { id: level1, hesap_adi: level1, borc: 0, subAccounts: {} };
+    }
+
+    if (level2 !== level1 && !groupedData[level1].subAccounts[level2]) {
+      groupedData[level1].subAccounts[level2] = { id: level2, hesap_adi: level2, borc: 0, subAccounts: {} };
+    }
+
+    if (level3 !== level2 && level3 !== level1) {
+      if (!groupedData[level1].subAccounts[level2].subAccounts[level3]) {
+        groupedData[level1].subAccounts[level2].subAccounts[level3] = { id: level3, hesap_adi: level3, borc: 0 };
+      }
+      groupedData[level1].subAccounts[level2].subAccounts[level3].borc += parseFloat(borc) || 0;
+    } else if (level2 !== level1) {
+      groupedData[level1].subAccounts[level2].borc += parseFloat(borc) || 0;
+    } else {
+      groupedData[level1].borc += parseFloat(borc) || 0;
+    }
+  });
+
+  return groupedData;
+}
+
+function calculateTotals(groupedData) {
+  const calculatedData = {};
+
+  Object.keys(groupedData).forEach(level1 => {
+    const level1Data = groupedData[level1];
+    const totalSubBorc = calculateSubGroupTotals(level1Data.subAccounts);
+    calculatedData[level1] = {
+      ...level1Data,
+      borc: totalSubBorc,
+    };
+  });
+
+  return calculatedData;
+}
+
+function calculateSubGroupTotals(subAccounts) {
+  let total = 0;
+
+  Object.values(subAccounts).forEach(subAccount => {
+    total += subAccount.borc;
+  });
+
+  return total;
+}
+
+function updateTable(groupedData, tableBody) {
+  tableBody.innerHTML = '';
+
+  const rows = [];
+  Object.keys(groupedData).forEach(level1 => {
+    const level1Data = groupedData[level1];
+    rows.push(createRow(level1, level1Data.hesap_adi, level1Data.borc, true, 'main', level1));
+
+    Object.keys(level1Data.subAccounts).forEach(level2 => {
+      const level2Data = level1Data.subAccounts[level2];
+      rows.push(createRow(level2, level2Data.hesap_adi, level2Data.borc, true, 'sub', level2, level1));
+
+      Object.keys(level2Data.subAccounts).forEach(level3 => {
+        const level3Data = level2Data.subAccounts[level3];
+        rows.push(createRow(level3, level3Data.hesap_adi, level3Data.borc, false, 'sub', level3, level2));
+      });
+    });
+  });
+
+  rows.forEach(row => tableBody.appendChild(row));
+
+  // Initialize all rows as hidden except the top level
+  initializeVisibility();
+  
+  const toggleButtons = document.querySelectorAll('.toggle-btn');
+  toggleButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const row = button.closest('tr');
+      const groupId = button.dataset.groupId;
+      const isCurrentlyVisible = !row.nextElementSibling.classList.contains('hidden');
+      toggleVisibility(groupId, !isCurrentlyVisible);
+      button.textContent = isCurrentlyVisible ? '+' : '-';
+    });
+  });
+}
+
+function createRow(kirilim, hesap_adi, borc, isMain, level, parentId = '') {
+  const tr = document.createElement('tr');
+  tr.classList.add(level);
+  tr.dataset.groupId = kirilim;
+  tr.innerHTML = `
+    <td>${isMain ? `<span class="toggle-btn" data-group-id="${kirilim}">+</span>` : ''}</td>
+    <td>${kirilim}</td>
+    <td>${borc.toFixed(2)}</td>
+  `;
+  return tr;
+}
+
+function toggleVisibility(groupId, isVisible) {
+  const rows = document.querySelectorAll(`[data-group-id^="${groupId}."]`);
+  rows.forEach(row => {
+    row.classList.toggle('hidden', !isVisible);
+  });
+}
+
+function initializeVisibility() {
+  const allSubRows = document.querySelectorAll('tr.sub');
+  allSubRows.forEach(row => {
+    row.classList.add('hidden');
+  });
+}
+
+window.onload = fetchData;
+  </script>
+</body>
+</html>

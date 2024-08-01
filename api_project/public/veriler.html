@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veri Görüntüleme</title>
+   <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Veri Tablosu</h1> 
+
+   <a>SELECT id, hesap_kodu, hesap_adi, tipi, ust_hesap_id, borc, alacak FROM data_records Sorgusu</a><br><br>
+   
+    <table id="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Hesap Kodu</th>
+          <th>Hesap Adı</th>
+          <th>Tipi</th>
+          <th>Üst Hesap ID</th>
+          <th>Borc</th>
+          <th>Alacak</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Veriler buraya eklenecek -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    async function fetchData() {
+      try {
+        const response = await fetch('/api/data-all');
+        const data = await response.json();
+        const tableBody = document.querySelector('#data-table tbody');
+
+        // Tabloyu temizle
+        tableBody.innerHTML = '';
+
+        data.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.id}</td>
+            <td>${row.hesap_kodu || ''}</td>
+            <td>${row.hesap_adi || ''}</td>
+            <td>${row.tipi || ''}</td>
+            <td>${row.ust_hesap_id || ''}</td>
+            <td>${row.borc || ''}</td>
+            <td>${row.alacak || ''}</td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (error) {
+        console.error('Veri çekme hatası:', error);
+      }
+    }
+
+    // Sayfa yüklendiğinde verileri getir
+    window.onload = fetchData;
+  </script>
+</body>
+</html>
